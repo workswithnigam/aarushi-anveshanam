@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>Aarushi Anveshanam – तम्सो मा ज्योतिर्गमय</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>tailwind.config={theme:{extend:{colors:{saf:'#FF6B00',sun:'#FFB800',grn:'#138808'}}}}</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.383.0/dist/umd/lucide.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{background:#fff;color:#1f2937;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}</style>
+</head><body><div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+const KEY='aarushi_db_v3', ADMIN_ID='admin@aarushi.com', ADMIN_DEFAULT='Admin@123';
+const firebaseConfig = {
+  apiKey: "AIzaSyAtaIDOQK-Lt_N0EsIIqWYt9GCPg-YYuWQ",
+  authDomain: "aarushi-anveshanam.firebaseapp.com",
+  projectId: "aarushi-anveshanam",
+  storageBucket: "aarushi-anveshanam.firebasestorage.app",
+  messagingSenderId: "607604046881",
+  appId: "1:607604046881:web:395fe114a4cabe129a7760"
+};
+let fs=null;
+try{firebase.initializeApp(firebaseConfig);fs=firebase.firestore();try{fs.settings({experimentalAutoDetectLongPolling:true,merge:true})}catch(e){}}catch(e){console.warn('Firebase unavailable - local mode',e)}
+const CLOUD={on:false};
+const COLS={courses:'courses',pdfs:'pdfs',plans:'plans',coupons:'coupons',live:'liveClasses',tests:'tests',users:'users',orders:'orders'};
+// Diff two db snapshots and write only what changed to Firestore (settings doc + one doc per item)
+const pushCloud=(a,b,fail)=>{if(!fs||!CLOUD.on)return;const w=p=>p.catch(e=>{console.warn(e);fail()});
+ if(JSON.stringify(a.settings)!==JSON.stringify(b.settings))w(fs.doc('settings/main').set(b.settings));
+ for(const k in COLS){if(a[k]===b[k])continue;const col=fs.collection(COLS[k]),pm=new Map(a[k].map(i=>[i.id,i]));
+  b[k].forEach(i=>{const o=pm.get(i.id);if(!o||JSON.stringify(o)!==JSON.stringify(i)){const {id,...d}=i;w(col.doc(id).set(d))}pm.delete(i.id)});
+  pm.forEach((_,id)=>w(col.doc(id).delete()))}};
+const seed={
+ settings:{upi:'merchant@upi',wa:'919999999999',logo:null,adminHash:null},
+ courses:[
+  {id:'c1',title:'UPSC Prelims Foundation',price:1999,desc:'Polity, History, Geography & Economy basics.',video:''},
+  {id:'c2',title:'SSC CGL Complete Batch',price:999,desc:'Quant, Reasoning, English & GK.',video:''}],
+ pdfs:[{id:'p1',title:'Polity Notes (Hindi)',price:149,desc:'Concise 120-page notes.',link:''},{id:'p2',title:'Maths Formula Book',price:99,desc:'All formulas in one place.',link:''}],
+ plans:[{id:'m1',title:'Monthly Pass',price:299,desc:'Unlock every course & PDF for 30 days.'},{id:'m2',title:'Yearly Pass',price:1999,desc:'Unlock everything for 12 months.'}],
+ coupons:[{id:'cp1',code:'AARUSHI20',pct:20}],
+ live:[{id:'l1',title:'Polity Doubt Session',time:'Sun 7:00 PM',link:'https://meet.google.com/'}],
+ tests:[
+  {id:'t1',kind:'test',title:'General Knowledge Mock 1',mins:3,qs:[{q:'Capital of India?',o:['Mumbai','New Delhi','Kolkata','Chennai'],a:1},{q:'Largest state by area?',o:['UP','MP','Rajasthan','Gujarat'],a:2}]},
+  {id:'t2',kind:'practice',title:'Quick Maths Practice',mins:2,qs:[{q:'15% of 200 = ?',o:['20','25','30','35'],a:2},{q:'12 × 12 = ?',o:['124','134','144','154'],a:2}]}],
+ orders:[],users:[],session:null
+};
+const load=()=>{try{const s=JSON.parse(localStorage.getItem(KEY));return s?{...seed,...s,settings:{...seed.settings,...s.settings}}:seed}catch(e){return seed}};
+const sha=async s=>{try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('aarushi:'+s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){let a=0xdeadbeef,b=0x41c6ce57;for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);a=Math.imul(a^c,2654435761);b=Math.imul(b^c,1597334677)}return 'c'+(a>>>0).toString(16)+(b>>>0).toString(16)}};
+const inr=n=>'₹'+Number(n).toLocaleString('en-IN');
+const embed=u=>{const m=(u||'').match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);return m?'https://www.youtube.com/embed/'+m[1]:null};
+const Icon=({n,s=18})=>{const r=useRef();useEffect(()=>{try{const k=n.replace(/(^|-)(\w)/g,(m,a,b)=>b.toUpperCase());const el=lucide.createElement(lucide.icons[k]);el.setAttribute('width',s);el.setAttribute('height',s);r.current.replaceChildren(el)}catch(e){}},[n]);return <span ref={r} className="inline-flex"/>};
+const Btn=({c='bg-saf',...p})=><button {...p} className={`${c} text-white font-semibold px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2 justify-center ${p.className||''}`}/>;
+const Inp=p=><input {...p} className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-saf"/>;
+const Player=({url})=>{const e=embed(url);return e?<iframe className="w-full aspect-video rounded-xl" src={e} allowFullScreen title="video"/>:url?<video controls className="w-full rounded-xl" src={url}/>:<p className="text-sm text-gray-500">No video added yet.</p>};
+const readLogo=(e,db,setDb)=>{const file=e.target.files&&e.target.files[0];if(!file)return;const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{let d=r.result;try{const c=document.createElement('canvas');const m=Math.min(img.width,img.height);c.width=c.height=256;c.getContext('2d').drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,256,256);d=c.toDataURL('image/jpeg',0.88)}catch(x){}setDb({...db,settings:{...db.settings,logo:d}})};img.src=r.result};r.readAsDataURL(file);e.target.value=''};
+const Logo=({db,setDb,size=48,edit})=>{const ref=useRef();const L=db.settings.logo;return <button type="button" disabled={!edit} onClick={()=>ref.current.click()} className="rounded-full shrink-0 border-2 border-white ring-2 ring-saf overflow-hidden bg-gradient-to-br from-saf via-sun to-grn flex items-center justify-center text-white font-extrabold" style={{width:size,height:size,fontSize:size/3}}>{L?<img src={L} alt="logo" className="w-full h-full object-cover"/>:'AA'}{edit&&<input ref={ref} type="file" accept="image/*" className="hidden" onClick={e=>e.stopPropagation()} onChange={e=>readLogo(e,db,setDb)}/>}</button>};
+
+function Checkout({item,db,setDb,user,close}){
+ const S=db.settings;
+ const [code,setCode]=useState(''),[pct,setPct]=useState(0),[used,setUsed]=useState(''),[utr,setUtr]=useState(''),[err,setErr]=useState(''),[done,setDone]=useState(null);
+ const final=Math.round(item.price*(1-pct/100));
+ const upi=`upi://pay?pa=${S.upi}&pn=Aarushi%20Anveshanam&am=${final}&cu=INR`;
+ const qr=(()=>{try{const q=qrcode(0,'M');q.addData(upi);q.make();return q.createDataURL(6)}catch(e){return ''}})();
+ const apply=()=>{const c=db.coupons.find(x=>x.code.toUpperCase()===code.trim().toUpperCase());if(c){setPct(c.pct);setUsed(c.code);setErr('')}else{setPct(0);setUsed('');setErr('Invalid coupon')}};
+ const submit=async()=>{
+  if(!/^\d{12}$/.test(utr)) return setErr('UTR must be exactly 12 digits');
+  try{if(CLOUD.on){const d=await fs.collection('orders').where('utr','==',utr).get();if(!d.empty)return setErr('This UTR was already submitted')}else if(db.orders.some(o=>o.utr===utr))return setErr('This UTR was already submitted')}catch(e){}
+  const o={id:'o'+Date.now(),uid:user.id,name:user.name,itemId:item.id,itemName:item.title,amount:final,coupon:used||'—',utr,status:'Pending',at:new Date().toLocaleString()};
+  setDb({...db,orders:[...db.orders,o]});setDone(o);setErr('');
+ };
+ const wa=done&&`https://wa.me/${S.wa}?text=${encodeURIComponent(`Hi Admin, I paid ${inr(done.amount)} for "${done.itemName}". Name: ${done.name}. UTR: ${done.utr}`)}`;
+ return <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3" onClick={close}>
+  <div className="bg-white rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto p-5" onClick={e=>e.stopPropagation()}>
+   <div className="flex justify-between items-start"><div className="flex gap-3 items-center"><Logo db={db} setDb={setDb} size={40}/><div><h3 className="text-lg font-bold text-saf">Smart Checkout</h3><p className="text-sm text-gray-600">{item.title}</p></div></div><button onClick={close}><Icon n="x"/></button></div>
+   {done?<div className="text-center py-4 space-y-3">
+     <div className="text-grn flex justify-center"><Icon n="check-circle" s={48}/></div>
+     <p className="font-semibold">Order saved — status: Pending (waiting for Admin approval)</p>
+     <p className="text-sm text-gray-600">UTR {done.utr}. Send it to Admin on WhatsApp for fast approval.</p>
+     <a href={wa} target="_blank" rel="noreferrer" className="bg-grn text-white font-semibold px-4 py-2 rounded-lg inline-flex gap-2 items-center"><Icon n="message-circle"/>Send UTR on WhatsApp</a>
+   </div>:<>
+   <div className="flex gap-2 mt-3"><Inp placeholder="Coupon Code" value={code} onChange={e=>setCode(e.target.value)}/><Btn c="bg-sun" onClick={apply}>Apply</Btn></div>
+   {used&&<p className="text-grn text-sm mt-1">{used} applied — {pct}% off</p>}
+   <div className="text-center mt-4">
+    <p className="text-sm text-gray-500">Amount to pay</p>
+    <p className="text-3xl font-extrabold text-grn">{inr(final)} {pct>0&&<s className="text-base text-gray-400 font-normal">{inr(item.price)}</s>}</p>
+    {qr&&<img src={qr} alt="UPI QR" className="mx-auto mt-2 w-48 h-48 border-4 border-sun rounded-xl"/>}
+    <p className="text-xs text-gray-500 mt-1">Scan with any UPI app · {S.upi}</p>
+    <a href={upi} className="mt-2 bg-saf text-white font-semibold px-4 py-2 rounded-lg inline-flex gap-2 items-center"><Icon n="smartphone"/>Pay via UPI App</a>
+   </div>
+   <div className="mt-4"><Inp inputMode="numeric" maxLength={12} placeholder="Enter 12-Digit UPI UTR / Reference No." value={utr} onChange={e=>setUtr(e.target.value.replace(/\D/g,''))}/><p className="text-xs text-gray-500 mt-1">{utr.length}/12 digits</p></div>
+   {err&&<p className="text-red-600 text-sm mt-1">{err}</p>}
+   <Btn c="bg-grn" className="w-full mt-3" onClick={submit}>Submit Payment</Btn></>}
+  </div></div>;
+}
+
+function Quiz({test,back,onDone}){
+ const [i,setI]=useState(0),[ans,setAns]=useState({}),[t,setT]=useState(test.mins*60),[fin,setFin]=useState(false);
+ useEffect(()=>{if(fin)return;if(t<=0){setFin(true);return}const h=setTimeout(()=>setT(t-1),1000);return()=>clearTimeout(h)},[t,fin]);
+ const score=test.qs.filter((q,k)=>ans[k]===q.a).length;
+ useEffect(()=>{if(fin)onDone(score,test.qs.length)},[fin]);
+ if(test.qs.length===0) return <div className="p-6 text-center">No questions yet. <Btn onClick={back}>Back</Btn></div>;
+ if(fin) return <div className="max-w-xl mx-auto p-6 text-center space-y-3">
+  <h2 className="text-2xl font-bold">Result</h2><p className="text-5xl font-extrabold text-grn">{score}/{test.qs.length}</p>
+  <div className="text-left space-y-2">{test.qs.map((q,k)=><div key={k} className={`p-2 rounded border ${ans[k]===q.a?'border-grn bg-green-50':'border-red-300 bg-red-50'}`}><p className="font-medium">{q.q}</p><p className="text-sm">Correct: {q.o[q.a]} · You: {ans[k]!=null?q.o[ans[k]]:'Skipped'}</p></div>)}</div>
+  <Btn onClick={back}>Back</Btn></div>;
+ const q=test.qs[i];
+ return <div className="max-w-xl mx-auto p-4">
+  <div className="flex justify-between items-center mb-3"><b>{test.title}</b><span className="bg-sun/30 px-3 py-1 rounded-full font-mono flex gap-1 items-center"><Icon n="timer" s={16}/>{String(Math.floor(t/60)).padStart(2,'0')}:{String(t%60).padStart(2,'0')}</span></div>
+  <p className="text-sm text-gray-500">Question {i+1} of {test.qs.length}</p>
+  <h3 className="text-lg font-semibold my-2">{q.q}</h3>
+  <div className="space-y-2">{q.o.map((o,k)=><button key={k} onClick={()=>setAns({...ans,[i]:k})} className={`w-full text-left border rounded-lg px-4 py-2 ${ans[i]===k?'border-saf bg-orange-50 font-semibold':''}`}>{o}</button>)}</div>
+  <div className="flex justify-between mt-4"><Btn c="bg-gray-500" disabled={i===0} onClick={()=>setI(i-1)}>Prev</Btn>
+  {i<test.qs.length-1?<Btn onClick={()=>setI(i+1)}>Next</Btn>:<Btn c="bg-grn" onClick={()=>setFin(true)}>Submit</Btn>}</div></div>;
+}
+
+function Auth({db,setDb,onLogin}){
+ const [mode,setMode]=useState('login'),[f,setF]=useState({name:'',id:'',pw:'',ref:''}),[err,setErr]=useState(''),[busy,setBusy]=useState(false);
+ const set=k=>e=>setF({...f,[k]:e.target.value});
+ const find=async(field,val)=>CLOUD.on?(await fs.collection('users').where(field,'==',val).get()).docs.map(d=>({...d.data(),id:d.id})):db.users.filter(u=>u[field]===val);
+ const submit=async()=>{
+  const id=f.id.trim().toLowerCase();
+  if(!id||!f.pw)return setErr('Enter ID and password');
+  setBusy(true);setErr('');
+  try{
+   if(mode==='login'){
+    if(id===ADMIN_ID){const s=db.settings,h=await sha(f.pw);const ok=s.adminHash?h===s.adminHash:f.pw===ADMIN_DEFAULT;
+     if(!ok)return setErr('Wrong ID or password');
+     onLogin({role:'admin'},null,s.adminHash?s:{...s,adminHash:await sha(ADMIN_DEFAULT)});return}
+    const hu=await sha(id+':'+f.pw),u=(await find('contact',id)).find(x=>x.hash===hu);
+    if(!u)return setErr('Wrong ID or password');
+    onLogin({role:'student',uid:u.id},u);return}
+   if(!f.name.trim())return setErr('Enter your name');
+   if(!/^\d{10}$/.test(id)&&!/^\S+@\S+\.\S+$/.test(id))return setErr('Enter a valid 10-digit mobile or email');
+   if(f.pw.length<6)return setErr('Password must be at least 6 characters');
+   if(id===ADMIN_ID||(await find('contact',id)).length)return setErr('Already registered — please login');
+   const refU=f.ref.trim()?(await find('code',f.ref.trim().toUpperCase()))[0]:null;
+   const nu={id:'u'+Date.now(),name:f.name.trim(),contact:id,hash:await sha(id+':'+f.pw),code:'AARU'+Math.random().toString(36).slice(2,6).toUpperCase(),points:refU?25:0,progress:{},scores:[]};
+   if(CLOUD.on){const {id:_i,...d}=nu;if(refU)await fs.collection('users').doc(refU.id).update({points:firebase.firestore.FieldValue.increment(50)});await fs.collection('users').doc(nu.id).set(d)}
+   else setDb({...db,users:db.users.map(u=>refU&&u.id===refU.id?{...u,points:u.points+50}:u).concat(nu)});
+   onLogin({role:'student',uid:nu.id},nu);
+  }catch(e){setErr('Could not connect: '+e.message)}finally{setBusy(false)}
+ };
+ return <section className="max-w-md mx-auto p-6"><h2 className="text-2xl font-bold mb-3 border-l-4 border-saf pl-3">{mode==='login'?'Login':'Student Registration'}</h2>
+  <div className="space-y-3">
+   {mode==='register'&&<Inp placeholder="Full name" value={f.name} onChange={set('name')}/>}
+   <Inp placeholder={mode==='login'?'ID (Email or Mobile)':'Mobile number or Email'} value={f.id} onChange={set('id')} autoCapitalize="none"/>
+   <Inp type="password" placeholder="Password" value={f.pw} onChange={set('pw')}/>
+   {mode==='register'&&<Inp placeholder="Referral code (optional)" value={f.ref} onChange={set('ref')}/>}
+   {err&&<p className="text-red-600 text-sm">{err}</p>}
+   <Btn className="w-full" disabled={busy} onClick={submit}>{busy?'Please wait…':mode==='login'?'Login':'Register'}</Btn>
+   <button className="text-sm text-saf" onClick={()=>{setMode(mode==='login'?'register':'login');setErr('')}}>{mode==='login'?'New student? Register here':'Already registered? Login'}</button></div></section>;
+}
+
+function Crud({db,setDb,k,pre,fields,show}){
+ const [f,setF]=useState({}),[err,setErr]=useState('');
+ const items=db[k];
+ const save=()=>{const o={...f};fields.forEach(x=>{if(x.t==='number')o[x.k]=+o[x.k]||0});
+  if(!String(f[fields[0].k]??'').trim())return setErr(fields[0].l+' is required');
+  setDb({...db,[k]:o.id?items.map(i=>i.id===o.id?o:i):[...items,{...o,id:pre+Date.now()}]});setF({});setErr('')};
+ return <div>
+  <div className="grid sm:grid-cols-2 gap-2 border rounded-xl p-3 bg-orange-50">{fields.map(x=><Inp key={x.k} type={x.t||'text'} placeholder={x.l} value={f[x.k]??''} onChange={e=>setF({...f,[x.k]:e.target.value})}/>)}
+   <div className="flex gap-2"><Btn c="bg-grn" onClick={save}>{f.id?'Update':'Add'}</Btn>{f.id&&<Btn c="bg-gray-500" onClick={()=>setF({})}>Cancel</Btn>}</div></div>
+  {err&&<p className="text-red-600 text-sm mt-1">{err}</p>}
+  <div className="mt-3 space-y-2">{items.map(i=><div key={i.id} className="border rounded-lg p-3 flex justify-between gap-2 items-center"><div className="text-sm min-w-0 break-words">{show(i)}</div>
+   <div className="flex gap-1 shrink-0"><Btn c="bg-sun" className="!px-2 !py-1" onClick={()=>setF(i)}><Icon n="pencil" s={14}/></Btn><Btn c="bg-red-600" className="!px-2 !py-1" onClick={()=>window.confirm('Delete this item?')&&setDb({...db,[k]:items.filter(x=>x.id!==i.id)})}><Icon n="trash-2" s={14}/></Btn></div></div>)}
+   {items.length===0&&<p className="text-gray-500 text-sm">Nothing here yet.</p>}</div></div>;
+}
+
+function TestsAdmin({db,setDb}){
+ const [t,setT]=useState({kind:'test'}),[q,setQ]=useState({}),[open,setOpen]=useState(null),[err,setErr]=useState('');
+ const upd=tests=>setDb({...db,tests});
+ const saveT=()=>{if(!(t.title||'').trim())return setErr('Title required');const o={...t,mins:+t.mins||5};upd(o.id?db.tests.map(x=>x.id===o.id?{...x,...o}:x):[...db.tests,{...o,id:'t'+Date.now(),qs:[]}]);setT({kind:'test'});setErr('')};
+ const saveQ=()=>{const o=[q.o0,q.o1,q.o2,q.o3];if(!(q.q||'').trim()||o.some(x=>!(x||'').trim()))return setErr('Fill question and all 4 options');
+  const a=Math.min(4,Math.max(1,+q.a||1))-1,qs=db.tests.find(x=>x.id===open).qs,n={q:q.q,o,a};
+  upd(db.tests.map(x=>x.id===open?{...x,qs:q.idx!=null?qs.map((y,i)=>i===q.idx?n:y):[...qs,n]}:x));setQ({});setErr('')};
+ const ot=db.tests.find(x=>x.id===open);
+ return <div className="space-y-3">
+  <div className="grid sm:grid-cols-4 gap-2 border rounded-xl p-3 bg-orange-50">
+   <Inp placeholder="Test title" value={t.title||''} onChange={e=>setT({...t,title:e.target.value})}/><Inp type="number" placeholder="Minutes" value={t.mins||''} onChange={e=>setT({...t,mins:e.target.value})}/>
+   <select className="border rounded-lg px-3 py-2" value={t.kind} onChange={e=>setT({...t,kind:e.target.value})}><option value="test">Test Series</option><option value="practice">Practice Set</option></select>
+   <Btn c="bg-grn" onClick={saveT}>{t.id?'Update':'Add Test'}</Btn></div>
+  {err&&<p className="text-red-600 text-sm">{err}</p>}
+  {db.tests.map(x=><div key={x.id} className="border rounded-lg p-3"><div className="flex justify-between items-center gap-2"><div className="text-sm"><b>{x.title}</b> · {x.kind==='test'?'Test Series':'Practice'} · {x.mins} min · {x.qs.length} Qs</div>
+   <div className="flex gap-1"><Btn c="bg-saf" className="!px-2 !py-1 text-sm" onClick={()=>{setOpen(open===x.id?null:x.id);setQ({})}}>MCQs</Btn><Btn c="bg-sun" className="!px-2 !py-1" onClick={()=>setT(x)}><Icon n="pencil" s={14}/></Btn><Btn c="bg-red-600" className="!px-2 !py-1" onClick={()=>window.confirm('Delete test?')&&upd(db.tests.filter(y=>y.id!==x.id))}><Icon n="trash-2" s={14}/></Btn></div></div>
+   {open===x.id&&<div className="mt-3 space-y-2">
+    {x.qs.map((y,i)=><div key={i} className="text-sm flex justify-between gap-2 border-t pt-1"><span>{i+1}. {y.q} <span className="text-grn">(✓ {y.o[y.a]})</span></span><span className="flex gap-1 shrink-0"><button onClick={()=>setQ({q:y.q,o0:y.o[0],o1:y.o[1],o2:y.o[2],o3:y.o[3],a:y.a+1,idx:i})}><Icon n="pencil" s={14}/></button><button onClick={()=>upd(db.tests.map(z=>z.id===x.id?{...z,qs:z.qs.filter((_,j)=>j!==i)}:z))}><Icon n="trash-2" s={14}/></button></span></div>)}
+    <div className="grid sm:grid-cols-2 gap-2 bg-orange-50 p-2 rounded-lg"><Inp placeholder="Question" value={q.q||''} onChange={e=>setQ({...q,q:e.target.value})}/>
+     {[0,1,2,3].map(k=><Inp key={k} placeholder={'Option '+(k+1)} value={q['o'+k]||''} onChange={e=>setQ({...q,['o'+k]:e.target.value})}/>)}
+     <Inp type="number" placeholder="Correct option (1-4)" value={q.a||''} onChange={e=>setQ({...q,a:e.target.value})}/><Btn c="bg-grn" onClick={saveQ}>{q.idx!=null?'Update MCQ':'Add MCQ'}</Btn></div></div>}</div>)}
+ </div>;
+}
+
+function Settings({db,setDb}){
+ const s=db.settings,[f,setF]=useState({upi:s.upi,wa:s.wa}),[pw,setPw]=useState(''),[m,setM]=useState(''),lref=useRef();
+ useEffect(()=>{setF({upi:s.upi,wa:s.wa})},[s.upi,s.wa]);
+ const load2=()=>{const mg=(a,b)=>[...a,...b.filter(x=>!a.some(y=>y.id===x.id))];setDb({...db,courses:mg(db.courses,seed.courses),pdfs:mg(db.pdfs,seed.pdfs),plans:mg(db.plans,seed.plans),coupons:mg(db.coupons,seed.coupons),live:mg(db.live,seed.live),tests:mg(db.tests,seed.tests)});setM('Sample content added ✓')};
+ const save=async()=>{if(!f.upi.trim())return setM('UPI ID required');if(pw&&pw.length<6)return setM('Password min 6 characters');
+  setDb({...db,settings:{...s,upi:f.upi.trim(),wa:f.wa.replace(/\D/g,''),...(pw?{adminHash:await sha(pw)}:{})}});setPw('');setM('Saved ✓')};
+ return <div className="max-w-lg space-y-3">
+  <div className="flex items-center gap-4"><Logo db={db} setDb={setDb} size={72} edit/><div className="space-y-1"><input ref={lref} type="file" accept="image/*" className="hidden" onChange={e=>readLogo(e,db,setDb)}/><Btn onClick={()=>lref.current.click()}><Icon n="image-plus" s={16}/>Upload Brand Logo</Btn>{s.logo&&<button className="block text-sm text-red-600 underline" onClick={()=>setDb({...db,settings:{...s,logo:null}})}>Remove logo</button>}</div></div>
+  <label className="text-sm font-medium">Merchant UPI ID<Inp value={f.upi} onChange={e=>setF({...f,upi:e.target.value})}/></label>
+  <label className="text-sm font-medium">WhatsApp Support Number (with country code)<Inp inputMode="numeric" value={f.wa} onChange={e=>setF({...f,wa:e.target.value})}/></label>
+  <label className="text-sm font-medium">New Admin Password (leave blank to keep)<Inp type="password" value={pw} onChange={e=>setPw(e.target.value)}/></label>
+  <Btn c="bg-grn" onClick={save}>Save Settings</Btn>{m&&<span className="ml-3 text-sm">{m}</span>}<div className="pt-3 border-t"><Btn c="bg-sun" onClick={load2}>Load sample content</Btn><p className="text-xs text-gray-500 mt-1">Adds demo courses, PDFs, plans, a coupon, a live class and tests to Firestore.</p></div></div>;
+}
+
+function Admin({db,setDb,sync}){
+ const [tab,setTab]=useState('Payments');
+ const pend=db.orders.filter(o=>o.status==='Pending');
+ const setSt=(id,s)=>setDb({...db,orders:db.orders.map(o=>o.id===id?{...o,status:s}:o)});
+ const P=(t,x)=>`${t} · ${inr(x)}`;
+ const tabs={
+  Payments:()=><div><div className="overflow-x-auto border rounded-xl"><table className="w-full text-sm"><thead className="bg-sun/30"><tr>{['Student','Item','Amount','Coupon','UTR','Action'].map(h=><th key={h} className="p-2 text-left">{h}</th>)}</tr></thead>
+   <tbody>{pend.length===0&&<tr><td colSpan={6} className="p-3 text-gray-500">No pending payments.</td></tr>}
+   {pend.map(o=><tr key={o.id} className="border-t"><td className="p-2">{o.name}</td><td className="p-2">{o.itemName}</td><td className="p-2">{inr(o.amount)}</td><td className="p-2">{o.coupon}</td><td className="p-2 font-mono">{o.utr}</td>
+    <td className="p-2"><div className="flex gap-1"><Btn c="bg-grn" className="!px-2 !py-1" onClick={()=>setSt(o.id,'Approved')}>Approve &amp; Unlock</Btn><Btn c="bg-red-600" className="!px-2 !py-1" onClick={()=>setSt(o.id,'Rejected')}>Reject</Btn></div></td></tr>)}</tbody></table></div>
+   <h4 className="font-bold mt-4 mb-1">History</h4><div className="text-sm space-y-1">{db.orders.filter(o=>o.status!=='Pending').map(o=><div key={o.id} className="flex justify-between border-b py-1"><span>{o.name} — {o.itemName} ({inr(o.amount)})</span><span className={o.status==='Approved'?'text-grn':'text-red-600'}>{o.status}</span></div>)}</div></div>,
+  Courses:()=><Crud db={db} setDb={setDb} k="courses" pre="c" fields={[{k:'title',l:'Title'},{k:'price',l:'Price (₹)',t:'number'},{k:'desc',l:'Description'},{k:'video',l:'Video URL / YouTube link'}]} show={i=><><b>{i.title}</b> · {inr(i.price)}<br/><span className="text-gray-500">{i.video||'no video'}</span></>}/>,
+  PDFs:()=><Crud db={db} setDb={setDb} k="pdfs" pre="p" fields={[{k:'title',l:'Title'},{k:'price',l:'Price (₹)',t:'number'},{k:'desc',l:'Description'},{k:'link',l:'Google Drive / PDF download link'}]} show={i=><><b>{i.title}</b> · {inr(i.price)}<br/><span className="text-gray-500">{i.link||'no link'}</span></>}/>,
+  Live:()=><Crud db={db} setDb={setDb} k="live" pre="l" fields={[{k:'title',l:'Class title'},{k:'time',l:'Date & time'},{k:'link',l:'Meeting link'}]} show={i=><><b>{i.title}</b> · {i.time}<br/><span className="text-gray-500">{i.link}</span></>}/>,
+  Tests:()=><TestsAdmin db={db} setDb={setDb}/>,
+  Coupons:()=><Crud db={db} setDb={setDb} k="coupons" pre="cp" fields={[{k:'code',l:'Coupon code'},{k:'pct',l:'Discount %',t:'number'}]} show={i=><><b>{i.code}</b> · {i.pct}% off</>}/>,
+  Plans:()=><Crud db={db} setDb={setDb} k="plans" pre="m" fields={[{k:'title',l:'Plan name'},{k:'price',l:'Price (₹)',t:'number'},{k:'desc',l:'Description'}]} show={i=>P(i.title,i.price)}/>,
+  Settings:()=><Settings db={db} setDb={setDb}/>};
+ return <section className="max-w-6xl mx-auto p-4 sm:p-6">
+  <h2 className="text-2xl font-bold mb-3 border-l-4 border-saf pl-3">Admin Dashboard <span className="text-sm text-saf">({pend.length} pending)</span> <span className="text-xs ml-2 font-normal">{sync==='live'?'🟢 Live (Firebase)':sync==='error'?'🔴 Offline — local only':'🟡 Connecting…'}</span></h2>
+  <div className="flex gap-2 overflow-x-auto pb-2 mb-3">{Object.keys(tabs).map(t=><button key={t} onClick={()=>setTab(t)} className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${tab===t?'bg-saf text-white':'bg-orange-100'}`}>{t==='Live'?'Live Classes':t==='Tests'?'Test Series MCQs':t}</button>)}</div>
+  {tabs[tab]()}</section>;
+}
+
+function App(){
+ const [db,setDbRaw]=useState(load),[page,setPage]=useState('Home'),[buy,setBuy]=useState(null),[quiz,setQuiz]=useState(null),[menu,setMenu]=useState(false),[watch,setWatch]=useState(null),[sync,setSync]=useState(fs?'connecting':'error');
+ const dbRef=useRef(db);
+ const persist=n=>{try{localStorage.setItem(KEY,JSON.stringify(CLOUD.on?{...n,users:[],orders:[]}:n))}catch(e){}};
+ const apply=n=>{dbRef.current=n;setDbRaw(n);persist(n)};
+ const raw=p=>apply({...dbRef.current,...p}); // updates from Firestore: no write-back
+ const setDb=d=>{const base=db,patch={};for(const k in d)if(d[k]!==base[k])patch[k]=d[k];const prev=dbRef.current,next={...prev,...patch};apply(next);pushCloud(prev,next,()=>setSync('error'))};
+ const role=db.session&&db.session.role, user=role==='student'?db.users.find(u=>u.id===db.session.uid):null;
+ // Real-time listeners: public content for everyone
+ useEffect(()=>{if(!fs)return;const un=[];const err=e=>{console.warn(e);CLOUD.on=false;setSync('error')};
+  const watchDoc=(r,fn)=>un.push(r.onSnapshot(fn,err));
+  watchDoc(fs.doc('settings/main'),s=>{CLOUD.on=true;setSync('live');if(s.exists)raw({settings:{...seed.settings,...s.data()}})});
+  Object.keys(COLS).forEach(k=>{if(k==='users'||k==='orders')return;watchDoc(fs.collection(COLS[k]),s=>raw({[k]:s.docs.map(d=>({...d.data(),id:d.id}))}))});
+  return()=>un.forEach(u=>u())},[]);
+ // Private listeners: admin sees all orders; a student sees only their own account + orders
+ useEffect(()=>{if(!fs||sync!=='live')return;const un=[];const err=e=>{console.warn(e);setSync('error')};
+  const mp=s=>s.docs.map(d=>({...d.data(),id:d.id}));
+  if(role==='admin')un.push(fs.collection('orders').onSnapshot(s=>raw({orders:mp(s)}),err));
+  else if(role==='student'){const uid=db.session.uid;
+   un.push(fs.doc('users/'+uid).onSnapshot(s=>{if(s.exists)raw({users:[{...s.data(),id:s.id}]})},err));
+   un.push(fs.collection('orders').where('uid','==',uid).onSnapshot(s=>raw({orders:mp(s)}),err))}
+  else raw({users:[],orders:[]});
+  return()=>un.forEach(u=>u())},[role,db.session&&db.session.uid,sync]);
+ const hasPlan=db.orders.some(x=>user&&x.uid===user.id&&x.status==='Approved'&&x.itemId.startsWith('m'));
+ const unlocked=id=>role==='admin'||(!!user&&(hasPlan||db.orders.some(o=>o.uid===user.id&&o.itemId===id&&o.status==='Approved')));
+ const go=p=>{setPage(p);setQuiz(null);setMenu(false);window.scrollTo(0,0)};
+ const buyNow=it=>{if(!user){go('Login/Register');return}setBuy(it)};
+ const logout=()=>{raw({session:null});setWatch(null);go('Home')};
+ const onLogin=(session,u,settings)=>{if(settings)setDb({...db,session,settings});else raw(CLOUD.on&&u?{session,users:[u]}:{session});go(session.role==='admin'?'Admin Dashboard':'My Learning')};
+ const nav=['Home','All Courses','PDF Store','Live Classes','Membership','Login/Register','My Learning','Test Series','Recorded Video','Practice Set'];
+ if(role==='admin') nav.push('Admin Dashboard');
+ const Card=({it,type})=>{const un=unlocked(it.id);const pend=user&&db.orders.some(o=>o.uid===user.id&&o.itemId===it.id&&o.status==='Pending');
+  return <div className="border rounded-2xl p-4 shadow-sm flex flex-col gap-2 bg-white">
+   <div className="h-24 rounded-xl bg-gradient-to-br from-saf to-sun flex items-center justify-center text-white"><Icon n={type==='pdf'?'file-text':type==='plan'?'crown':'book-open'} s={40}/></div>
+   <h3 className="font-bold">{it.title}</h3><p className="text-sm text-gray-600 flex-1">{it.desc}</p>
+   <div className="flex justify-between items-center"><b className="text-grn text-lg">{inr(it.price)}</b>
+   {role==='admin'?<span className="text-xs text-gray-400">Admin view</span>:un?<span className="text-grn font-semibold flex gap-1 items-center"><Icon n="unlock" s={16}/>Unlocked</span>:pend?<span className="text-sm text-saf font-semibold">Pending…</span>:<Btn onClick={()=>buyNow(it)}>Buy Now</Btn>}</div></div>};
+ const Grid=({items,type})=><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{items.map(i=><Card key={i.id} it={i} type={type}/>)}</div>;
+ const Sec=({t,children})=><section className="max-w-6xl mx-auto p-4 sm:p-6"><h2 className="text-2xl font-bold mb-4 border-l-4 border-saf pl-3">{t}</h2>{children}</section>;
+ const Need=()=><Sec t="Please login"><p>This section is for registered students. <button className="text-saf underline" onClick={()=>go('Login/Register')}>Login / Register</button></p></Sec>;
+ const bump=id=>{const v=Math.min(100,((user.progress||{})[id]||0)+25);setDb({...db,users:db.users.map(u=>u.id===user.id?{...u,progress:{...(u.progress||{}),[id]:v}}:u)})};
+ const quizList=(kind,t)=>quiz?<Quiz test={quiz} back={()=>setQuiz(null)} onDone={(s,n)=>user&&setDb({...db,users:db.users.map(u=>u.id===user.id?{...u,scores:[...(u.scores||[]),{t:quiz.title,s,n,at:new Date().toLocaleString()}]}:u)})}/>:
+  <Sec t={t}><div className="space-y-3">{db.tests.filter(x=>x.kind===kind).map(x=><div key={x.id} className="border rounded-xl p-4 flex justify-between items-center"><div><b>{x.title}</b><p className="text-sm text-gray-600">{x.qs.length} Qs · {x.mins} min</p></div><Btn onClick={()=>user?setQuiz(x):go('Login/Register')}>{user?'Start':'Login to start'}</Btn></div>)}</div></Sec>;
+
+ const Pages={
+ 'Home':()=><>
+  <div className="bg-gradient-to-r from-saf via-sun to-grn text-white text-center py-14 px-4">
+   <div className="flex justify-center mb-3"><Logo db={db} setDb={setDb} size={88}/></div>
+   <h1 className="text-3xl sm:text-5xl font-extrabold">Aarushi Anveshanam</h1><p className="text-xl mt-2">तम्सो मा ज्योतिर्गमय</p>
+   <p className="mt-2 opacity-90">Courses, PDFs, live classes & test series — pay by UPI, unlock in minutes.</p>
+   <div className="mt-5 flex gap-3 justify-center flex-wrap"><Btn c="bg-white !text-saf" onClick={()=>go('All Courses')}>Explore Courses</Btn>{!role&&<Btn c="bg-grn" onClick={()=>go('Login/Register')}>Login / Register</Btn>}</div></div>
+  <Sec t="Featured Courses"><Grid items={db.courses}/></Sec></>,
+ 'All Courses':()=><Sec t="All Courses"><Grid items={db.courses}/></Sec>,
+ 'PDF Store':()=><Sec t="PDF Store"><Grid items={db.pdfs} type="pdf"/></Sec>,
+ 'Membership':()=><Sec t="Membership Plans"><Grid items={db.plans} type="plan"/></Sec>,
+ 'Live Classes':()=><Sec t="Live Classes"><div className="space-y-3">{db.live.map(l=><div key={l.id} className="border rounded-xl p-4 flex justify-between items-center flex-wrap gap-2"><div><b>{l.title}</b><p className="text-sm text-gray-600">{l.time}</p></div>
+  {role?<a href={l.link} target="_blank" rel="noreferrer" className="bg-grn text-white px-4 py-2 rounded-lg font-semibold inline-flex gap-2 items-center"><Icon n="video"/>Join</a>:<Btn onClick={()=>go('Login/Register')}>Login to join</Btn>}</div>)}</div></Sec>,
+ 'Login/Register':()=>role?<Sec t="My Account"><div className="border rounded-xl p-4 space-y-2 max-w-md"><p><b>{role==='admin'?'Administrator':user?user.name:'Student'}</b></p><p className="text-sm text-gray-500">{role==='admin'?ADMIN_ID:user?user.contact:''}</p><Btn c="bg-gray-600" onClick={logout}>Logout</Btn></div></Sec>:<Auth db={db} setDb={setDb} onLogin={onLogin}/>,
+ 'My Learning':()=>role==='admin'?<Sec t="My Learning"><Btn onClick={()=>go('Admin Dashboard')}>Open Admin Dashboard</Btn></Sec>:!user?<Need/>:
+  <Sec t="My Learning & Dashboard">
+   <div className="grid sm:grid-cols-3 gap-3 mb-2">
+    <div className="bg-orange-50 border border-saf rounded-xl p-4"><p className="text-sm">Referral Code</p><p className="text-2xl font-extrabold text-saf">{user.code}</p></div>
+    <div className="bg-yellow-50 border border-sun rounded-xl p-4"><p className="text-sm">Reward Points</p><p className="text-2xl font-extrabold text-sun">{user.points}</p></div>
+    <div className="bg-green-50 border border-grn rounded-xl p-4"><p className="text-sm">Hello</p><p className="text-xl font-extrabold text-grn truncate">{user.name}</p></div></div>
+   <p className="text-xs text-gray-500 mb-5">Share your code — friends get 25 pts on signup, you get 50.</p>
+   <h3 className="font-bold mb-2">My Courses</h3>
+   {db.courses.filter(c=>unlocked(c.id)).length===0&&<p className="text-gray-500 mb-4">No courses unlocked yet.</p>}
+   <div className="space-y-3 mb-6">{db.courses.filter(c=>unlocked(c.id)).map(c=>{const p=(user.progress||{})[c.id]||0;return <div key={c.id} className="border rounded-xl p-4"><div className="flex justify-between"><b>{c.title}</b><span className="text-grn font-bold">{p}%</span></div>
+    <div className="h-3 bg-gray-200 rounded-full my-2"><div className="h-3 rounded-full bg-gradient-to-r from-saf to-grn" style={{width:p+'%'}}/></div>
+    <div className="flex gap-2 mb-2"><Btn onClick={()=>setWatch(watch===c.id?null:c.id)}><Icon n="play" s={16}/>{watch===c.id?'Close':'Watch'}</Btn><Btn c="bg-sun" onClick={()=>bump(c.id)} disabled={p>=100}>Mark Lesson Complete</Btn></div>
+    {watch===c.id&&<Player url={c.video}/>}</div>})}</div>
+   <h3 className="font-bold mb-2">My PDFs</h3>
+   {db.pdfs.filter(p=>unlocked(p.id)).length===0&&<p className="text-gray-500">No PDFs unlocked yet.</p>}
+   <div className="space-y-2 mb-6">{db.pdfs.filter(p=>unlocked(p.id)).map(p=><div key={p.id} className="border rounded-xl p-3 flex justify-between items-center"><span>{p.title}</span>
+    {p.link?<a href={p.link} target="_blank" rel="noreferrer" download className="bg-grn text-white px-4 py-2 rounded-lg font-semibold inline-flex gap-2 items-center"><Icon n="download" s={16}/>Download</a>:<span className="text-sm text-gray-500">Link coming soon</span>}</div>)}</div>
+   {(db.courses.some(c=>!unlocked(c.id))||db.pdfs.some(p=>!unlocked(p.id)))&&<><h3 className="font-bold mb-2">Available to Unlock</h3>
+    <Grid items={db.courses.filter(c=>!unlocked(c.id))}/><div className="h-3"/><Grid items={db.pdfs.filter(p=>!unlocked(p.id))} type="pdf"/></>}
+   <h3 className="font-bold mt-6 mb-2">Test Scores</h3>
+   <div className="text-sm space-y-1">{(user.scores||[]).length===0&&<p className="text-gray-500">No tests attempted yet.</p>}{(user.scores||[]).map((s,i)=><div key={i} className="flex justify-between border-b py-1"><span>{s.t}</span><b className="text-grn">{s.s}/{s.n}</b></div>)}</div>
+   <h3 className="font-bold mt-6 mb-2">My Orders</h3>
+   <div className="space-y-1 text-sm">{db.orders.filter(o=>o.uid===user.id).map(o=><div key={o.id} className="flex justify-between border-b py-1"><span>{o.itemName} · {inr(o.amount)}</span><span className={o.status==='Approved'?'text-grn font-semibold':o.status==='Rejected'?'text-red-600':'text-saf'}>{o.status}</span></div>)}</div>
+  </Sec>,
+ 'Recorded Video':()=><Sec t="Recorded Video"><div className="space-y-4">{db.courses.map(c=><div key={c.id} className="border rounded-xl p-4"><b>{c.title}</b>
+   {unlocked(c.id)?<div className="mt-2"><Player url={c.video}/></div>:<div className="mt-2 flex items-center gap-2 text-gray-500 text-sm flex-wrap"><Icon n="lock" s={16}/>Locked <Btn className="!py-1 text-sm" onClick={()=>buyNow(c)}>Buy Now</Btn></div>}</div>)}</div></Sec>,
+ 'Test Series':()=>quizList('test','Test Series'),
+ 'Practice Set':()=>quizList('practice','Practice Set'),
+ 'Admin Dashboard':()=>role==='admin'?<Admin db={db} setDb={setDb} sync={sync}/>:<Need/>
+ };
+ return <div className="min-h-screen">
+  <header className="sticky top-0 z-40 bg-white border-b-4 border-saf shadow">
+   <div className="max-w-6xl mx-auto px-3 py-2 flex items-center gap-3">
+    <Logo db={db} setDb={setDb} size={48}/>
+    <div className="flex-1 leading-tight"><b className="text-saf text-lg">Aarushi Anveshanam</b><p className="text-xs text-grn">तम्सो मा ज्योतिर्गमय</p></div>
+    {role&&<button onClick={logout} className="text-xs border rounded-full px-3 py-1 text-gray-600">Logout</button>}
+    <button className="lg:hidden" onClick={()=>setMenu(!menu)}><Icon n={menu?'x':'menu'} s={26}/></button></div>
+   <nav className={`${menu?'flex':'hidden'} lg:flex flex-col lg:flex-row lg:flex-wrap max-w-6xl mx-auto px-2 pb-2 gap-1`}>
+    {nav.map(n=><button key={n} onClick={()=>go(n)} className={`px-3 py-1.5 rounded-full text-sm font-medium text-left ${page===n?'bg-saf text-white':'hover:bg-orange-100'}`}>{n==='Login/Register'&&role?'My Account':n==='Login/Register'?'Login / Register':n}</button>)}</nav>
+  </header>
+  <main>{Pages[page]()}</main>
+  <footer className="bg-grn text-white text-center text-sm py-4 mt-8"><p className="text-xs mb-2 opacity-90">{sync==='live'?'● Live sync with Firebase':sync==='error'?'● Offline — showing data saved on this device':'● Connecting…'}</p><div className="flex justify-center mb-2"><Logo db={db} setDb={setDb} size={44}/></div>© Aarushi Anveshanam · तम्सो मा ज्योतिर्गमय</footer>
+  <a href={`https://wa.me/${db.settings.wa}?text=Hi%20Aarushi%20Anveshanam`} target="_blank" rel="noreferrer" className="fixed right-4 bottom-4 z-40 bg-grn text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center"><Icon n="message-circle" s={28}/></a>
+  {buy&&user&&<Checkout item={buy} db={db} setDb={setDb} user={user} close={()=>setBuy(null)}/>}
+ </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script></body></html>
